@@ -6,6 +6,7 @@ import com.teamdev.jxbrowser.chromium.internal.Environment;
 import com.teamdev.jxbrowser.chromium.javafx.BrowserView;
 import controladores.InicioController;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -25,6 +26,13 @@ public class Servidor extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception{
+        System.setProperty("java.security.policy","file:///users/macbookpro/server.policy");
+        System.setProperty("java.rmi.server.codebase", "file:///Users/macbookpro/UV/Desarrollo de sistemas en red/codigo/___proyecto final/SalaEducativa/out/production/");
+
+        if (System.getSecurityManager() == null) {
+            System.setSecurityManager(new SecurityManager());
+        }
+
         Browser browser = new Browser();
         BrowserView browserView = new BrowserView(browser);
         StackPane pane = new StackPane();
@@ -35,7 +43,13 @@ public class Servidor extends Application {
         videoStage.setTitle("Webcam");
         videoStage.setScene(scene);
 
-        //browser.loadURL("http://localhost:8080/demos/demo_multiparty.html");
+        videoStage.setAlwaysOnTop(true);
+        videoStage.setOnCloseRequest(event -> {
+            Platform.exit();
+            System.exit(0);
+        });
+
+        browser.loadURL("http://localhost:8080/demos/demo_multiparty.html");
 
 
         //Parent root = FXMLLoader.load(getClass().getResource("resources/inicio.fxml"));

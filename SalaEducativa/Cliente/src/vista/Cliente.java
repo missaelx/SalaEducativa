@@ -28,6 +28,13 @@ public class Cliente extends Application {
 
     @Override
     public void start(Stage primaryStage) throws Exception{
+        //System.setProperty("java.security.policy","file:///users/macbookpro/server.policy");
+        System.setProperty("java.rmi.server.codebase", "file:///Users/macbookpro/UV/Desarrollo de sistemas en red/codigo/___proyecto final/SalaEducativa/out/production/");
+
+        if (System.getSecurityManager() == null) {
+            System.setSecurityManager(new SecurityManager());
+        }
+
         Browser browser = new Browser();
         BrowserView browserView = new BrowserView(browser);
         StackPane pane = new StackPane();
