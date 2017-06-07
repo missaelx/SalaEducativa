@@ -1,6 +1,5 @@
 package controladores;
 
-import com.healthmarketscience.rmiio.SimpleRemoteInputStream;
 import com.teamdev.jxbrowser.chromium.Browser;
 import com.teamdev.jxbrowser.chromium.BrowserCore;
 import com.teamdev.jxbrowser.chromium.internal.Environment;
@@ -34,6 +33,7 @@ import org.apache.pdfbox.PDFToImage;
 import rmixp.ClienteRMI;
 import rmixp.LineaDibujada;
 import rmixp.ServidorRMI;
+import rmixp.excepciones.ClaveGrupoNotFoundException;
 
 
 import java.io.*;
@@ -42,10 +42,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.rmi.AccessException;
-import java.rmi.NotBoundException;
-import java.rmi.RMISecurityManager;
-import java.rmi.RemoteException;
+import java.rmi.*;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
@@ -70,7 +67,7 @@ public class SalaController implements Initializable, ServidorRMI {
     @FXML
     private WebView webviewCamara;
 
-
+    Map<String, ClienteRMI> clientesConectados = new HashMap<>();
 
 
     private String urlBroadcast; //String URL de broadcast
@@ -81,7 +78,7 @@ public class SalaController implements Initializable, ServidorRMI {
     private Browser browser;
 
     private String pathPdfDiapositivas = "";
-    private List<String> usuariosConectados = new ArrayList<>();
+    //private List<String> usuariosConectados = new ArrayList<>();
     private List<Participacion> participaciones = new ArrayList<>();
 
     private static String pathImagenes = System.getProperty("user.dir") + "/archivos/img/";
@@ -167,32 +164,25 @@ public class SalaController implements Initializable, ServidorRMI {
     }
 
     @Override
-    public void conectar(String claveGrupo, String nombre) throws RemoteException {
-        if(!claveGrupo.equals(this.claveGrupo)){
+    public void conectar(String claveGrupo, String nombre, ClienteRMI clienteRMI) throws RemoteException, AlreadyBoundException, ClaveGrupoNotFoundException {
+        if(clientesConectados.containsKey(nombre)) throw new AlreadyBoundException("Usa otro nombre");
+        if(!claveGrupo.equals(this.claveGrupo)) throw new ClaveGrupoNotFoundException();
+
+        System.out.println("Se ha conectado: " + nombre);
+        clientesConectados.put(nombre, clienteRMI);
+
+
+        clientesConectados.forEach((s, cliente) -> {
             try {
-                //buscamos el objeto del cliente para sacarlos
-                Registry registry = LocateRegistry.getRegistry();
-                ClienteRMI cliente = (ClienteRMI) registry.lookup(nombre);
-                cliente.denegarEntrada();
-            } catch (NotBoundException e) {
+                cliente.actualizarListaUsuariosConectados(Arrays.asList((String[]) clientesConectados.keySet().toArray()));
+            } catch (RemoteException e) {
+                System.out.println("Error al actualizar la lista de usuarios");
                 e.printStackTrace();
             }
-        } else {
-            System.out.println("Se ha conectado: " + nombre);
-            usuariosConectados.add(nombre);
-            for (String user: usuariosConectados){
-                try {
-                    Registry registry = LocateRegistry.getRegistry();
-                    ClienteRMI cliente = null;
-                    cliente = (ClienteRMI) registry.lookup(user);
-                    cliente.actualizarListaUsuariosConectados(usuariosConectados);
-                } catch (NotBoundException e) {
-                    e.printStackTrace();
-                }
-            }
-            Platform.runLater(() -> actualizarUsuariosConectados());
+        });
 
-        }
+
+        Platform.runLater(() -> actualizarUsuariosConectados());
     }
 
     @Override
@@ -228,16 +218,15 @@ public class SalaController implements Initializable, ServidorRMI {
     @Override
     public void enviarMensaje(String mensaje, String cliente) throws RemoteException {
         String mensajeFinal = "<" + cliente + "> " + mensaje;
-        for (String nombreUsuario : usuariosConectados){
-            Registry registry = LocateRegistry.getRegistry();
-            ClienteRMI clienteRemoto = null;
+
+        clientesConectados.forEach((s, clienteRMI) -> {
             try {
-                clienteRemoto = (ClienteRMI) registry.lookup(nombreUsuario);
-                clienteRemoto.actualizarChat(mensajeFinal);
-            } catch (NotBoundException e) {
-                e.printStackTrace();
+                clienteRMI.actualizarChat(mensajeFinal);
+            } catch (RemoteException e) {
+                System.out.println("Error al actualizar chat");
             }
-        }
+        });
+
         actualizarChat(mensajeFinal);
     }
 
@@ -254,7 +243,7 @@ public class SalaController implements Initializable, ServidorRMI {
     }
     public void actualizarUsuariosConectados(){
         listviewUsuariosConectados.getItems().clear();
-        listviewUsuariosConectados.getItems().addAll(usuariosConectados);
+        listviewUsuariosConectados.getItems().addAll(Arrays.asList((String[]) clientesConectados.keySet().toArray()));
     }
     public void setTable(){
         tableParticipacion.refresh();
@@ -319,16 +308,13 @@ public class SalaController implements Initializable, ServidorRMI {
     }
 
     private void notificarCambioIndiceAUsuarios(){
-        for (String user: usuariosConectados){
+        clientesConectados.forEach((s, clienteRMI) -> {
             try {
-                Registry registry = LocateRegistry.getRegistry();
-                ClienteRMI cliente = null;
-                cliente = (ClienteRMI) registry.lookup(user);
-                cliente.actualizarInidiceRemotoPdf(currentIndexImagenes);
-            } catch (Exception ex) {
-                System.out.println(ex.getMessage());
+                clienteRMI.actualizarInidiceRemotoPdf(currentIndexImagenes);
+            } catch (RemoteException e) {
+                System.out.println("Error al actualizar el indice");
             }
-        }
+        });
     }
 
     @FXML
@@ -338,17 +324,17 @@ public class SalaController implements Initializable, ServidorRMI {
         String mensajeFinal = "\n----------------------------\n"+
                 "<" + cliente + "> " + mensaje + "\n" +
                 "----------------------------\n";
-        for (String nombreUsuario : usuariosConectados){
-            Registry registry = null;
+
+        clientesConectados.forEach((s, clienteRMI) -> {
             try {
-                registry = LocateRegistry.getRegistry();
-                ClienteRMI clienteRemoto = null;
-                clienteRemoto = (ClienteRMI) registry.lookup(nombreUsuario);
-                clienteRemoto.actualizarChat(mensajeFinal);
-            } catch (NotBoundException | RemoteException en) {
-                en.printStackTrace();
+                clienteRMI.actualizarChat(mensajeFinal);
+            } catch (RemoteException e1) {
+                e1.printStackTrace();
+                System.out.println("Error al actualizar char");
             }
-        }
+        });
+
+
         actualizarChat(mensajeFinal);
         txtMensaje.setText("");
     }
@@ -381,18 +367,15 @@ public class SalaController implements Initializable, ServidorRMI {
                     "******************************\n";
             participaciones.remove(tableParticipacion.getSelectionModel().getSelectedIndex());
             setTable();
-            for (String nombreUsuario : usuariosConectados){
-                Registry registry = null;
-                try {
 
-                    registry = LocateRegistry.getRegistry();
-                    ClienteRMI clienteRemoto = null;
-                    clienteRemoto = (ClienteRMI) registry.lookup(nombreUsuario);
-                    clienteRemoto.actualizarChat(mensajeFinal);
-                } catch (NotBoundException | RemoteException en) {
-                    en.printStackTrace();
+            clientesConectados.forEach((s, clienteRMI) -> {
+                try {
+                    clienteRMI.actualizarChat(mensajeFinal);
+                } catch (RemoteException e1) {
+                    e1.printStackTrace();
+                    System.out.println("Error al actualizar chat");
                 }
-            }
+            });
             actualizarChat(mensajeFinal);
         }
     }
@@ -481,16 +464,14 @@ public class SalaController implements Initializable, ServidorRMI {
         });
 
         btnEnviar.setOnAction(event -> {
-            for (String user: usuariosConectados){
+            clientesConectados.forEach((s, clienteRMI) -> {
                 try {
-                    Registry registry = LocateRegistry.getRegistry();
-                    ClienteRMI cliente = null;
-                    cliente = (ClienteRMI) registry.lookup(user);
-                    cliente.enviarAnotacionesDiapositiva(indiceAEditar, lineasDibujadas);
-                } catch (Exception ex) {
-                    System.out.println(ex.getMessage());
+                    clienteRMI.enviarAnotacionesDiapositiva(indiceAEditar, lineasDibujadas);
+                } catch (RemoteException e1) {
+                    e1.printStackTrace();
+                    System.out.println("Error al enviar las anotaciones");
                 }
-            }
+            });
         });
 
         vBox.getChildren().addAll(anchorRoot, btnBorrar, btnEnviar);

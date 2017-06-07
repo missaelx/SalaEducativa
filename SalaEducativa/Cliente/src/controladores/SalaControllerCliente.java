@@ -18,6 +18,7 @@ import org.apache.pdfbox.PDFToImage;
 import rmixp.ClienteRMI;
 import rmixp.LineaDibujada;
 import rmixp.ServidorRMI;
+import rmixp.excepciones.ClaveGrupoNotFoundException;
 
 import java.io.File;
 import java.io.FilenameFilter;
@@ -132,13 +133,14 @@ public class SalaControllerCliente implements Initializable, ClienteRMI {
             ClienteRMI clienteRMI = (ClienteRMI) UnicastRemoteObject.exportObject(salaControllerCliente, 0);
 
             Registry registro = LocateRegistry.getRegistry(ipMaestro);
-            registro.bind(nombreUsuario, clienteRMI);
+            //error
+            //registro.bind(nombreUsuario, clienteRMI);
             //cargamos el stub del servidor
             servidor = (ServidorRMI) registro.lookup("Servidor");
 
 
             // nos logueamos en el sistema
-            servidor.conectar(claveGrupo, nombreUsuario);
+            servidor.conectar(claveGrupo, nombreUsuario, clienteRMI);
         } catch (RemoteException e) {
             e.printStackTrace();
         } catch (AlreadyBoundException e) {
@@ -152,6 +154,15 @@ public class SalaControllerCliente implements Initializable, ClienteRMI {
             System.exit(-1);
         } catch (NotBoundException e) {
             e.printStackTrace();
+        } catch (ClaveGrupoNotFoundException e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Nombre de clase no valido");
+            alert.setHeaderText("El nombre que escogiste no fue encontrado");
+            alert.setContentText("Selecciona otro nombre e intentálo de nuevo");
+            alert.showAndWait();
+            e.printStackTrace();
+            Platform.exit();
+            System.exit(-1);
         }
 
 

@@ -1,11 +1,14 @@
 package rmixp;
 
+import rmixp.excepciones.ClaveGrupoNotFoundException;
+
+import java.rmi.AlreadyBoundException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 
 public interface ServidorRMI extends Remote {
-    void conectar(String claveGrupo, String nombre) throws RemoteException;
+    void conectar(String claveGrupo, String nombre, ClienteRMI clienteRMI) throws RemoteException, AlreadyBoundException, ClaveGrupoNotFoundException;
     void desconectar(String nombre) throws RemoteException;
 
     /**
